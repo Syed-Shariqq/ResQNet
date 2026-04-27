@@ -37,6 +37,17 @@ const NETWORK_BUTTONS = [
   },
 ]
 
+function SectionLabel({ children }) {
+  return (
+    <p
+      className="text-xs tracking-widest uppercase mb-4"
+      style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}
+    >
+      {children}
+    </p>
+  )
+}
+
 export default function DemoPage() {
   const [simulated,  setSimulated]  = useState(null)
   const [syncLog,    setSyncLog]    = useState([])
@@ -45,9 +56,12 @@ export default function DemoPage() {
 
   // Poll queue size every 2s
   useEffect(() => {
-    setQueueCount(getQueue().length)
+    const initialQueueId = setTimeout(() => setQueueCount(getQueue().length), 0)
     const id = setInterval(() => setQueueCount(getQueue().length), 2000)
-    return () => clearInterval(id)
+    return () => {
+      clearTimeout(initialQueueId)
+      clearInterval(id)
+    }
   }, [])
 
   // Auto-scroll log on new entries
@@ -75,15 +89,6 @@ export default function DemoPage() {
     setSyncLog(prev => [...prev, { time: new Date().toLocaleTimeString(), message }])
     setQueueCount(getQueue().length)
   }
-
-  const SectionLabel = ({ children }) => (
-    <p
-      className="text-xs tracking-widest uppercase mb-4"
-      style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}
-    >
-      {children}
-    </p>
-  )
 
   return (
     <div

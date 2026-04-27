@@ -1,52 +1,66 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
 
-async function fetchWithHandling(url, options) {
+async function request(path, options = {}) {
+  const headers = {
+    Accept: 'application/json',
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    ...options.headers,
+  };
+
   let response;
+
   try {
-    response = await fetch(url, options);
-  } catch (error) {
-    throw new Error('NETWORK_UNAVAILABLE');
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      headers,
+    });
+  } catch {
+    throw new Error('Network unavailable. Command center cannot reach the API.');
   }
+
+  const contentType = response.headers.get('content-type') || '';
+  const payload = contentType.includes('application/json')
+    ? await response.json()
+    : await response.text();
 
   if (!response.ok) {
-    throw new Error('API_ERROR:' + response.status);
+    const message = payload?.error || payload || `API request failed with ${response.status}`;
+    throw new Error(message);
   }
 
-  return await response.json();
+  return payload;
 }
 
-export async function createRequest(data) {
-  return await fetchWithHandling(`${BASE_URL}/api/requests`, {
+export function getRequests(options) {
+  return request('/api/requests', options);
+}
+
+export function createRequest(data) {
+  return request('/api/requests', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(data),
   });
 }
 
-export async function getAllRequests() {
-  return await fetchWithHandling(`${BASE_URL}/api/requests`);
-}
+export function assignRequest(id, responderName) {
+  const params = new URLSearchParams({ responderName });
 
-export async function assignRequest(id, responderName) {
-  return await fetchWithHandling(`${BASE_URL}/api/requests/${id}/assign?responderName=${encodeURIComponent(responderName)}`, {
+  return request(`/api/requests/${id}/assign?${params.toString()}`, {
     method: 'PUT',
   });
 }
 
-export async function resolveRequest(id) {
-  return await fetchWithHandling(`${BASE_URL}/api/requests/${id}/resolve`, {
+export function resolveRequest(id) {
+  return request(`/api/requests/${id}/resolve`, {
     method: 'PUT',
   });
 }
 
-export async function syncOfflineRequests(requestsArray) {
-  return await fetchWithHandling(`${BASE_URL}/api/requests/sync`, {
+export function syncOfflineRequests(requestsArray) {
+  return request('/api/requests/sync', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
     body: JSON.stringify(requestsArray),
   });
 }
+
+export const getAllRequests = getRequests;

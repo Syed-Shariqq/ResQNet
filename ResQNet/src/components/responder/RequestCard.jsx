@@ -1,133 +1,109 @@
-const channelIcon = {
-  internet:       '🌐',
-  sms_compressed: '📡',
-  relay_queued:   '💾',
+import Card from '../shared/Card';
+import ChannelIndicator from '../shared/ChannelIndicator';
+import RequestTracker from '../shared/RequestTracker';
+import StatusBadge from '../shared/StatusBadge';
+import { getSeverityTone, normalizeToken } from '../shared/statusUtils';
+
+function formatTimestamp(value) {
+  if (!value) return 'Time unavailable';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Time unavailable';
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    month: 'short',
+    day: 'numeric',
+  }).format(date);
 }
 
-function timeAgo(createdAt) {
-  const diff = Date.now() - new Date(createdAt).getTime()
-  const seconds = Math.floor(diff / 1000)
-  if (seconds < 60)  return `${seconds}s ago`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60)  return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  return `${hours}h ago`
-}
+export default function RequestCard({
+  request,
+  onAssign,
+  onResolve,
+  busyAction,
+  onSelect,
+  isSelected = false,
+}) {
+  const severity = getSeverityTone(request.severity);
+  const status = normalizeToken(request.status, 'pending');
+  const canAssign = status === 'pending';
+  const canResolve = status === 'assigned';
+  const isBusy = Boolean(busyAction);
 
-export default function RequestCard({ request, onAssign, onResolve }) {
-  const isCritical = request.severity === 'critical'
+  const handleAssign = (event) => {
+    event.stopPropagation();
+    onAssign(request);
+  };
+
+  const handleResolve = (event) => {
+    event.stopPropagation();
+    onResolve(request);
+  };
 
   return (
-    <div
-      className="rounded-xl p-5 flex flex-col gap-3 transition-all"
-      style={{
-        background: 'var(--color-bg-card)',
-        border: isCritical
-          ? '2px solid var(--color-red-primary)'
-          : '1px solid var(--color-border)',
-        boxShadow: isCritical ? '0 0 20px rgba(220,38,38,0.15)' : 'none',
-      }}
+    <Card
+      accent={severity}
+      className={`request-card request-card--${severity} ${isSelected ? 'request-card--selected' : ''}`}
+      interactive
+      onClick={() => onSelect?.(request)}
     >
-      {/* TOP ROW */}
-      <div className="flex justify-between items-start">
-        <SeverityBadge severity={request.severity} />
-        <div className="flex items-center">
-          <span className="text-sm">{channelIcon[request.channelUsed] ?? '📡'}</span>
-          <span
-            className="ml-2 text-xs px-2 py-0.5 rounded"
-            style={{
-              background: 'var(--color-bg-elevated)',
-              color: 'var(--color-text-muted)',
-              fontFamily: 'var(--font-mono)',
-            }}
-          >
-            {request.category || 'unknown'}
-          </span>
+      <div className="request-card__header">
+        <div className="request-card__badges">
+          <StatusBadge type="severity" value={request.severity} />
+          <StatusBadge value={request.status} />
+        </div>
+        <ChannelIndicator channel={request.channelUsed} compact />
+      </div>
+
+      <div className="request-card__body">
+        <p className="request-card__description">
+          {request.description || 'No description supplied.'}
+        </p>
+        <div className="request-card__meta">
+          <span>{request.location || 'Unknown location'}</span>
+          <span>{formatTimestamp(request.createdAt)}</span>
         </div>
       </div>
 
-      {/* DESCRIPTION */}
-      <p
-        className="text-sm leading-relaxed"
-        style={{
-          color: 'var(--color-text-primary)',
-          overflow: 'hidden',
-          display: '-webkit-box',
-          WebkitLineClamp: 3,
-          WebkitBoxOrient: 'vertical',
-        }}
-      >
-        {request.description}
-      </p>
+      <RequestTracker
+        compact
+        requestId={request.id}
+        status={request.status}
+        channel={request.channelUsed}
+      />
 
-      {/* LOCATION */}
-      <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-        📍 {request.location}
-      </p>
-
-      {/* FOOTER */}
-      <div className="flex justify-between items-center mt-2">
-        <span
-          className="text-xs"
-          style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}
-        >
-          {request.createdAt ? timeAgo(request.createdAt) : '—'}
+      <div className="request-card__footer">
+        <span className="request-card__category">
+          {request.category || 'unclassified'}
         </span>
-
-        {/* Actions by status */}
-        {request.status === 'pending' && (
-          <button
-            onClick={() => onAssign(request.id)}
-            className="text-xs px-4 py-2 rounded-lg text-white transition-opacity hover:opacity-80"
-            style={{ background: 'var(--color-blue)' }}
-          >
-            Accept
-          </button>
-        )}
-
-        {request.status === 'assigned' && (
-          <div className="flex gap-2 items-center">
-            <span
-              className="text-xs"
-              style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-mono)' }}
-            >
-              👤 {request.assignedTo}
-            </span>
+        <div className="request-card__actions">
+          {canAssign && (
             <button
-              onClick={() => onResolve(request.id)}
-              className="text-xs px-3 py-2 rounded-lg text-white transition-opacity hover:opacity-80"
-              style={{ background: 'var(--color-green)' }}
+              className="button button--primary"
+              disabled={isBusy}
+              onClick={handleAssign}
+              type="button"
             >
-              Resolve
+              {busyAction === 'assign' ? 'Accepting' : 'Accept'}
             </button>
-          </div>
-        )}
-
-        {request.status === 'resolved' && (
-          <span
-            className="text-xs"
-            style={{ color: 'var(--color-green)', fontFamily: 'var(--font-mono)' }}
-          >
-            ✅ Resolved
-          </span>
-        )}
+          )}
+          {canResolve && (
+            <button
+              className="button button--success"
+              disabled={isBusy}
+              onClick={handleResolve}
+              type="button"
+            >
+              {busyAction === 'resolve' ? 'Resolving' : 'Resolve'}
+            </button>
+          )}
+          {status === 'resolved' && (
+            <span className="request-card__closed">Closed</span>
+          )}
+        </div>
       </div>
-    </div>
-  )
-}
-
-// Inlined here to avoid a circular import — SeverityBadge is tiny
-function SeverityBadge({ severity }) {
-  const cfg = {
-    critical: { cls: 'bg-red-600 text-white',    label: '⚠ CRITICAL' },
-    high:     { cls: 'bg-orange-500 text-white',  label: '▲ HIGH' },
-    medium:   { cls: 'bg-yellow-500 text-black',  label: '● MEDIUM' },
-    low:      { cls: 'bg-green-600 text-white',   label: '✓ LOW' },
-  }[severity?.toLowerCase()] ?? { cls: 'bg-gray-600 text-white', label: '? UNKNOWN' }
-
-  return (
-    <span className={`inline-flex px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide ${cfg.cls}`}>
-      {cfg.label}
-    </span>
-  )
+    </Card>
+  );
 }

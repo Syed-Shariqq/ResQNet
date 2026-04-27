@@ -40,13 +40,14 @@ export function useNetworkState() {
   };
 
   useEffect(() => {
-    checkNetwork();
+    const initialCheckId = setTimeout(checkNetwork, 0);
 
     window.addEventListener('online', checkNetwork);
     window.addEventListener('offline', checkNetwork);
     const interval = setInterval(checkNetwork, 15000);
 
     return () => {
+      clearTimeout(initialCheckId);
       window.removeEventListener('online', checkNetwork);
       window.removeEventListener('offline', checkNetwork);
       clearInterval(interval);

@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+:root {
+  --color-bg-primary: #030712;
+  --color-bg-secondary: #0f1117;
+  --color-bg-card: #111827;
+  --color-bg-elevated: #1f2937;
+  --color-border: #1f2937;
+  --color-border-subtle: #374151;
+  --color-text-primary: #f9fafb;
+  --color-text-secondary: #9ca3af;
+  --color-text-muted: #4b5563;
+  --color-red-primary: #dc2626;
+  --color-red-glow: #7f1d1d;
+  --color-amber: #d97706;
+  --color-green: #16a34a;
+  --color-blue: #2563eb;
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--color-bg-primary); }
+::-webkit-scrollbar-thumb { background: var(--color-border-subtle); border-radius: 2px; }
+
+/* Glow effects */
+.glow-red { box-shadow: 0 0 20px rgba(220, 38, 38, 0.3); }
+.glow-amber { box-shadow: 0 0 20px rgba(217, 119, 6, 0.3); }
+.glow-green { box-shadow: 0 0 20px rgba(22, 163, 74, 0.3); }
+
+/* Card base */
+.card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+/* Pulse animation for network badge */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.pulse { animation: pulse-dot 1.5s ease-in-out infinite; }

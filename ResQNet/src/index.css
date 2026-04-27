@@ -55,7 +55,8 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -864,6 +865,138 @@ a {
     box-shadow var(--transition-fast);
 }
 
+.location-field {
+  position: relative;
+  display: grid;
+  gap: var(--space-md);
+}
+
+.location-input-shell {
+  position: relative;
+}
+
+.location-input-shell input {
+  padding-right: 48px;
+}
+
+.location-input-shell.is-selected input {
+  border-color: rgba(34, 197, 94, 0.36);
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.08);
+}
+
+.location-selected-dot {
+  position: absolute;
+  top: 50%;
+  right: var(--space-md);
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--color-success);
+  box-shadow: 0 0 24px rgba(34, 197, 94, 0.34);
+  transform: translateY(-50%);
+}
+
+.location-use-button {
+  justify-self: start;
+  min-height: 32px;
+  padding: 0 var(--space-md);
+  border-radius: 999px;
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--color-info);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition:
+    background var(--transition-fast),
+    transform var(--transition-fast),
+    opacity var(--transition-fast);
+}
+
+.location-use-button:hover {
+  background: rgba(56, 189, 248, 0.16);
+  transform: translateY(-2px);
+}
+
+.location-use-button:disabled {
+  cursor: wait;
+  opacity: 0.62;
+  transform: none;
+}
+
+.location-suggestions {
+  position: absolute;
+  top: calc(100% + var(--space-md));
+  left: 0;
+  right: 0;
+  z-index: 40;
+  display: grid;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0)),
+    #101618;
+  box-shadow: 0 24px 72px rgba(0, 0, 0, 0.44), 0 1px 0 rgba(255, 255, 255, 0.06);
+  animation: suggestion-in 0.2s var(--ease-standard) both;
+}
+
+.location-suggestions__state {
+  padding: var(--space-md);
+  color: var(--color-text-secondary);
+  font-size: 0.88rem;
+}
+
+.location-suggestion {
+  display: grid;
+  gap: var(--space-md);
+  width: 100%;
+  padding: var(--space-md);
+  border-radius: var(--radius-card);
+  background: transparent;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition:
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.location-suggestion:hover,
+.location-suggestion.is-active {
+  background: rgba(56, 189, 248, 0.1);
+  transform: translateY(-1px);
+}
+
+.location-suggestion strong {
+  color: var(--color-text-primary);
+  font-size: 0.94rem;
+  line-height: 1.3;
+}
+
+.location-suggestion span {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+
+.location-suggestion mark {
+  border-radius: 4px;
+  background: rgba(56, 189, 248, 0.18);
+  color: var(--color-info);
+}
+
+.location-validation {
+  padding: var(--space-md);
+  border-radius: var(--radius-card);
+  background: rgba(245, 158, 11, 0.12);
+  color: #f8d68a;
+  font-size: 0.88rem;
+}
+
 .operator-field input:focus,
 .field input:focus,
 .field textarea:focus,
@@ -963,7 +1096,9 @@ a {
 }
 
 .map-marker-shell,
-.responder-marker-shell {
+.map-marker-shell.leaflet-div-icon,
+.responder-marker-shell,
+.responder-marker-shell.leaflet-div-icon {
   background: transparent;
   border: 0;
 }
@@ -1023,6 +1158,10 @@ a {
 
 .map-marker--low {
   color: var(--color-low);
+}
+
+.map-marker--draft {
+  color: var(--color-info);
 }
 
 .responder-marker {
@@ -1266,6 +1405,17 @@ a {
   from {
     opacity: 0;
     transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes suggestion-in {
+  from {
+    opacity: 0;
+    transform: translateY(-16px);
   }
   to {
     opacity: 1;

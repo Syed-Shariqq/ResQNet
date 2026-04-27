@@ -27,6 +27,8 @@ export async function submitRequest(formData, triageResult, networkState) {
   const basePayload = {
     description: formData.description,
     location: formData.location,
+    latitude: formData.latitude,
+    longitude: formData.longitude,
     severity: triageResult.severity,
     category: triageResult.category,
     smsPayload: triageResult.sms_payload,
@@ -36,13 +38,24 @@ export async function submitRequest(formData, triageResult, networkState) {
   if (networkState === NetworkState.ONLINE) {
     const payload = { ...basePayload, channelUsed: 'internet' };
     const result = await createRequest(payload);
-    return { success: true, channel: 'internet', synced: true, data: result };
+    return {
+      success: true,
+      channel: 'internet',
+      synced: true,
+      data: {
+        ...result,
+        latitude: result.latitude ?? payload.latitude,
+        longitude: result.longitude ?? payload.longitude,
+      },
+    };
   }
 
   if (networkState === NetworkState.DEGRADED) {
     const minPayload = {
       description: triageResult.sms_payload,
       location: formData.location,
+      latitude: formData.latitude,
+      longitude: formData.longitude,
       severity: triageResult.severity,
       category: triageResult.category,
       smsPayload: triageResult.sms_payload,
@@ -51,7 +64,16 @@ export async function submitRequest(formData, triageResult, networkState) {
     };
     try {
       const result = await createRequest(minPayload);
-      return { success: true, channel: 'sms_compressed', synced: true, data: result };
+      return {
+        success: true,
+        channel: 'sms_compressed',
+        synced: true,
+        data: {
+          ...result,
+          latitude: result.latitude ?? minPayload.latitude,
+          longitude: result.longitude ?? minPayload.longitude,
+        },
+      };
     } catch {
       pushToQueue({ ...basePayload, channelUsed: 'relay_queued' });
       return { success: true, channel: 'relay_queued', synced: false, data: null };

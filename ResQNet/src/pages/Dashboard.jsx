@@ -6,6 +6,7 @@ import Card from '../components/shared/Card';
 import { ChannelStatusBar } from '../components/shared/ChannelIndicator';
 import MapView from '../components/shared/MapView';
 import { getSeverityTone, normalizeToken } from '../components/shared/statusUtils';
+import { hasValidCoordinates } from '../lib/locationService';
 import { assignRequest, getRequests, resolveRequest } from '../lib/api';
 
 const FILTERS = [
@@ -23,12 +24,54 @@ const severityOrder = {
   low: 3,
 };
 
+const COORDINATE_CACHE_KEY = 'resqnet_request_coordinates';
+
 function readResponderName() {
   return localStorage.getItem('resqnet_responder_name') || 'Command Desk';
 }
 
 function countStatus(requests, status) {
   return requests.filter((request) => normalizeToken(request.status) === status).length;
+}
+
+function readCoordinateCache() {
+  try {
+    return JSON.parse(localStorage.getItem(COORDINATE_CACHE_KEY) || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function writeCoordinateCache(request) {
+  if (!request?.id || !hasValidCoordinates(request)) return;
+
+  const current = readCoordinateCache();
+  localStorage.setItem(COORDINATE_CACHE_KEY, JSON.stringify({
+    ...current,
+    [request.id]: {
+      latitude: Number(request.latitude ?? request.lat),
+      longitude: Number(request.longitude ?? request.lng ?? request.lon),
+      location: request.location,
+    },
+  }));
+}
+
+function applyCoordinateCache(requests) {
+  const cache = readCoordinateCache();
+
+  return requests.map((request) => {
+    if (hasValidCoordinates(request)) return request;
+
+    const cached = cache[request.id];
+    if (!cached) return request;
+
+    return {
+      ...request,
+      location: request.location || cached.location,
+      latitude: cached.latitude,
+      longitude: cached.longitude,
+    };
+  });
 }
 
 function orderRequests(requests) {
@@ -91,6 +134,7 @@ export default function Dashboard() {
   const [selectedRequestId, setSelectedRequestId] = useState(null);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [responderName, setResponderName] = useState(readResponderName);
+  const [draftLocation, setDraftLocation] = useState(null);
   const cardRefs = useRef(new Map());
 
   const loadRequests = useCallback(async ({ silent = false } = {}) => {
@@ -98,7 +142,7 @@ export default function Dashboard() {
 
     try {
       const data = await getRequests();
-      setRequests(Array.isArray(data) ? data : []);
+      setRequests(Array.isArray(data) ? applyCoordinateCache(data) : []);
       setLastRefreshed(new Date());
       setError('');
     } catch (requestError) {
@@ -166,12 +210,14 @@ export default function Dashboard() {
   }, []);
 
   const handleCreatedRequest = useCallback((created) => {
+    writeCoordinateCache(created);
     setRequests((current) => orderRequests([
       created,
       ...current.filter((request) => request.id !== created.id),
     ]));
     setFilter('all');
     setSelectedRequestId(created.id);
+    setDraftLocation(null);
     window.setTimeout(() => {
       cardRefs.current.get(created.id)?.scrollIntoView({
         behavior: 'smooth',
@@ -186,7 +232,16 @@ export default function Dashboard() {
     setBusyRequest({ id: request.id, action: 'assign' });
     try {
       const updated = await assignRequest(request.id, responderName || 'Command Desk');
-      setRequests((current) => current.map((item) => (item.id === request.id ? updated : item)));
+      setRequests((current) => current.map((item) => (
+        item.id === request.id
+          ? {
+              ...item,
+              ...updated,
+              latitude: updated.latitude ?? item.latitude,
+              longitude: updated.longitude ?? item.longitude,
+            }
+          : item
+      )));
       setSelectedRequestId(request.id);
     } catch (assignError) {
       setError(assignError.message);
@@ -201,7 +256,16 @@ export default function Dashboard() {
     setBusyRequest({ id: request.id, action: 'resolve' });
     try {
       const updated = await resolveRequest(request.id);
-      setRequests((current) => current.map((item) => (item.id === request.id ? updated : item)));
+      setRequests((current) => current.map((item) => (
+        item.id === request.id
+          ? {
+              ...item,
+              ...updated,
+              latitude: updated.latitude ?? item.latitude,
+              longitude: updated.longitude ?? item.longitude,
+            }
+          : item
+      )));
       setSelectedRequestId(request.id);
     } catch (resolveError) {
       setError(resolveError.message);
@@ -249,6 +313,7 @@ export default function Dashboard() {
             <QuickRequestPanel
               onCreated={handleCreatedRequest}
               onError={setError}
+              onLocationPreview={setDraftLocation}
             />
 
             <div className="section-title request-feed__header">
@@ -314,6 +379,7 @@ export default function Dashboard() {
 
           <div className="dashboard-side">
             <MapView
+              draftLocation={draftLocation}
               onSelectRequest={(request) => handleSelectRequest(request, { scroll: true })}
               requests={requests}
               selectedRequestId={focusRequest?.id}

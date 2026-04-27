@@ -4,33 +4,73 @@ import { submitRequest } from '../../engine/resilienceEngine';
 import { triageRequest } from '../../engine/triageEngine';
 import Card from '../shared/Card';
 import ChannelIndicator from '../shared/ChannelIndicator';
+import LocationAutocomplete from '../shared/LocationAutocomplete';
 import NetworkBadge from '../shared/NetworkBadge';
 import RequestTracker from '../shared/RequestTracker';
 import StatusBadge from '../shared/StatusBadge';
+import {
+  normalizeSelectedLocation,
+  resolveLocationFromText,
+} from '../../lib/locationService';
 
 export default function RequestForm() {
   const { networkState } = useNetworkState();
   const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('');
+  const [locationInput, setLocationInput] = useState('');
+  const [selectedLocation, setSelectedLocation] = useState(null);
   const [step, setStep] = useState('idle');
   const [triageResult, setTriageResult] = useState(null);
   const [submitResult, setSubmitResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [locationError, setLocationError] = useState('');
 
   const isWorking = step === 'triaging' || step === 'submitting';
 
+  const handleLocationInput = (value) => {
+    setLocationInput(value);
+    setSelectedLocation(null);
+    setLocationError('');
+  };
+
+  const handleLocationSelect = (place) => {
+    const normalized = normalizeSelectedLocation(place);
+    setSelectedLocation(normalized);
+    setLocationInput(normalized.displayName);
+    setLocationError('');
+  };
+
+  const resolveSubmitLocation = async () => {
+    if (selectedLocation) return normalizeSelectedLocation(selectedLocation);
+
+    try {
+      const resolved = await resolveLocationFromText(locationInput);
+      handleLocationSelect(resolved);
+      return resolved;
+    } catch (error) {
+      setLocationError(error.message);
+      throw error;
+    }
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
-    if (!description.trim() || !location.trim()) return;
+    if (!description.trim() || !locationInput.trim()) return;
 
     try {
       setErrorMsg('');
+      setLocationError('');
+      const place = await resolveSubmitLocation();
       setStep('triaging');
-      const triage = await triageRequest(description, location);
+      const triage = await triageRequest(description, place.displayName);
       setTriageResult(triage);
 
       setStep('submitting');
-      const result = await submitRequest({ description, location }, triage, networkState);
+      const result = await submitRequest({
+        description,
+        location: place.displayName,
+        latitude: place.lat,
+        longitude: place.lng,
+      }, triage, networkState);
       setSubmitResult(result);
       setStep('done');
     } catch (error) {
@@ -41,7 +81,9 @@ export default function RequestForm() {
 
   const handleReset = () => {
     setDescription('');
-    setLocation('');
+    setLocationInput('');
+    setSelectedLocation(null);
+    setLocationError('');
     setStep('idle');
     setTriageResult(null);
     setSubmitResult(null);
@@ -83,18 +125,25 @@ export default function RequestForm() {
                   />
                 </label>
 
-                <label className="field">
-                  <span>Location</span>
-                  <input
-                    onChange={(event) => setLocation(event.target.value)}
-                    placeholder="Nearest address, landmark, shelter, or coordinates"
-                    value={location}
-                  />
-                </label>
+                <LocationAutocomplete
+                  label="Location"
+                  onError={(message) => setLocationError(message)}
+                  onInputChange={handleLocationInput}
+                  onSelect={handleLocationSelect}
+                  placeholder="Search city, landmark, shelter, or address"
+                  selectedLocation={selectedLocation}
+                  value={locationInput}
+                />
+
+                {locationError && (
+                  <div className="location-validation" role="alert">
+                    {locationError}
+                  </div>
+                )}
 
                 <button
                   className="button button--danger button--full"
-                  disabled={!description.trim() || !location.trim()}
+                  disabled={!description.trim() || !locationInput.trim()}
                   type="submit"
                 >
                   Submit Emergency Request

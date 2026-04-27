@@ -3,6 +3,7 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import Card from './Card';
 import { getSeverityTone, normalizeToken } from './statusUtils';
+import { getCoordinates, hasValidCoordinates } from '../../lib/locationService';
 
 const DEFAULT_CENTER = [20.5937, 78.9629];
 
@@ -26,38 +27,6 @@ function hashValue(value) {
   return String(value || 'request').split('').reduce((hash, char) => {
     return ((hash << 5) - hash + char.charCodeAt(0)) | 0;
   }, 0);
-}
-
-function parseCoordinateText(value) {
-  const match = String(value || '').match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
-  if (!match) return null;
-
-  const lat = Number(match[1]);
-  const lng = Number(match[2]);
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
-  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
-
-  return [lat, lng];
-}
-
-function getRequestCoordinates(request, index = 0) {
-  const directLat = Number(request.latitude ?? request.lat);
-  const directLng = Number(request.longitude ?? request.lng);
-  if (Number.isFinite(directLat) && Number.isFinite(directLng)) {
-    return [directLat, directLng];
-  }
-
-  const parsed = parseCoordinateText(request.location);
-  if (parsed) return parsed;
-
-  const seed = Math.abs(hashValue(`${request.id || index}-${request.location || ''}`));
-  const angle = ((seed % 360) * Math.PI) / 180;
-  const radius = 0.55 + ((seed % 100) / 100) * 1.8;
-
-  return [
-    DEFAULT_CENTER[0] + Math.sin(angle) * radius,
-    DEFAULT_CENTER[1] + Math.cos(angle) * radius * 1.25,
-  ];
 }
 
 function getResponderOrigin(target, seed) {
@@ -88,6 +57,20 @@ function makeMarkerIcon(request, selectedId) {
   });
 }
 
+function makeDraftIcon() {
+  return L.divIcon({
+    className: 'map-marker-shell',
+    html: `
+      <span class="map-marker map-marker--draft is-active is-selected" aria-label="Selected request location">
+        <span class="map-marker__pulse"></span>
+        <span class="map-marker__core"></span>
+      </span>
+    `,
+    iconAnchor: [16, 16],
+    iconSize: [32, 32],
+  });
+}
+
 function makeResponderIcon() {
   return L.divIcon({
     className: 'responder-marker-shell',
@@ -107,7 +90,12 @@ function makePopup(request) {
   `;
 }
 
-export default function MapView({ requests = [], selectedRequestId, onSelectRequest }) {
+export default function MapView({
+  requests = [],
+  selectedRequestId,
+  draftLocation,
+  onSelectRequest,
+}) {
   const nodeRef = useRef(null);
   const mapRef = useRef(null);
   const markerLayerRef = useRef(null);
@@ -159,9 +147,10 @@ export default function MapView({ requests = [], selectedRequestId, onSelectRequ
     markersRef.current.clear();
 
     const bounds = [];
+    const mappableRequests = requests.filter(hasValidCoordinates);
 
-    requests.forEach((request, index) => {
-      const coordinates = getRequestCoordinates(request, index);
+    mappableRequests.forEach((request) => {
+      const coordinates = getCoordinates(request);
       bounds.push(coordinates);
 
       const marker = L.marker(coordinates, {
@@ -179,19 +168,42 @@ export default function MapView({ requests = [], selectedRequestId, onSelectRequ
       markersRef.current.set(request.id, marker);
     });
 
+    if (draftLocation && hasValidCoordinates(draftLocation)) {
+      const coordinates = getCoordinates(draftLocation);
+      bounds.push(coordinates);
+
+      L.marker(coordinates, {
+        icon: makeDraftIcon(),
+        keyboard: false,
+      })
+        .bindPopup(makePopup({
+          description: draftLocation.displayName,
+          status: 'selected location',
+          channelUsed: 'pending intake',
+        }), {
+          className: 'map-popup',
+          closeButton: false,
+        })
+        .addTo(markerLayer)
+        .openPopup();
+
+      map.flyTo(coordinates, 13, { animate: true, duration: 0.8 });
+      return;
+    }
+
     const selectedMarker = markersRef.current.get(selectedRequestId);
     if (selectedMarker) {
-      map.panTo(selectedMarker.getLatLng(), { animate: true, duration: 0.45 });
+      map.flyTo(selectedMarker.getLatLng(), Math.max(map.getZoom(), 12), { animate: true, duration: 0.75 });
       selectedMarker.openPopup();
       return;
     }
 
-    const signature = requests.map((request) => request.id).join('|');
+    const signature = mappableRequests.map((request) => request.id).join('|');
     if (bounds.length > 0 && signature !== fitSignatureRef.current) {
       map.fitBounds(bounds, { maxZoom: 7, padding: [24, 24] });
       fitSignatureRef.current = signature;
     }
-  }, [onSelectRequest, requests, selectedRequestId]);
+  }, [draftLocation, onSelectRequest, requests, selectedRequestId]);
 
   useEffect(() => {
     const responderLayer = responderLayerRef.current;
@@ -199,11 +211,13 @@ export default function MapView({ requests = [], selectedRequestId, onSelectRequ
 
     responderLayer.clearLayers();
 
-    const assignedRequests = requests.filter((request) => normalizeToken(request.status) === 'assigned');
+    const assignedRequests = requests.filter((request) => {
+      return normalizeToken(request.status) === 'assigned' && hasValidCoordinates(request);
+    });
     if (assignedRequests.length === 0) return undefined;
 
     const responders = assignedRequests.map((request, index) => {
-      const target = getRequestCoordinates(request, index);
+      const target = getCoordinates(request);
       const seed = Math.abs(hashValue(request.id || index));
       const origin = getResponderOrigin(target, seed);
       const marker = L.marker(origin, { icon: makeResponderIcon(), interactive: false }).addTo(responderLayer);
@@ -241,7 +255,9 @@ export default function MapView({ requests = [], selectedRequestId, onSelectRequ
           <p className="eyebrow">Live Map</p>
           <h2>Incident Geography</h2>
         </div>
-        <span className="map-count">{requests.length} tracked</span>
+        <span className="map-count">
+          {requests.filter(hasValidCoordinates).length}/{requests.length} mapped
+        </span>
       </div>
 
       <div className="map-view__canvas" ref={nodeRef} />
